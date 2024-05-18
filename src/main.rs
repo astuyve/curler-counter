@@ -6,8 +6,12 @@ use serde_json;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::time::Duration;
+use std::env;
 
-// {"handlerRunTime":1715529543389,"staticInitTime":1715529543384,"coldStartResult":true,"processUptime":0.116852724}%
+// {"handlerRunTime":1715529543389,
+// "staticInitTime":1715529543384,
+// "coldStartResult":true,
+// "processUptime":0.116852724}%
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FunctionResponse {
@@ -21,23 +25,41 @@ struct FunctionResponse {
     function_name: String,
 }
 
+fn get_function_urls(mut map: HashMap<&'static str, String>) -> HashMap<&str, String> {
+    if let Ok(url) = env::var("LOCAL_COLD_START_LAMBDA") {
+        map.insert("aws", url);
+    }
+    if let Ok(url) = env::var("LOCAL_COLD_START_VERCEL") {
+        map.insert("vercel", url);
+    }
+    if let Ok(url) = env::var("LOCAL_COLD_START_LWA") {
+        map.insert("lwa", url);
+    }
+    if let Ok(url) = env::var("LOCAL_COLD_START_HONO") {
+        map.insert("hono", url);
+    }
+    if let Ok(url) = env::var("LOCAL_COLD_START_SERVERLESS_HTTP") {
+        map.insert("serverless_http", url);
+    }
+    map
+}
+
 #[tokio::main]
 async fn main() {
-    let function_urls: HashMap<&str, &str> = HashMap::from([
-        ("AWS_LAMBDA_PLAIN", "https://lgd4ad2vtduveeemk2m6rntmmi0qexzn.lambda-url.us-east-1.on.aws/"),
-    ]);
+    let function_urls = get_function_urls(HashMap::new());
     let mut results_with_duration = Vec::new();
     for (function_name, url) in function_urls.iter() {
         let time_start = std::time::Instant::now();
-        let response = reqwest::get(*url).await.expect("no response").text().await.unwrap();
+        let response = reqwest::get(url).await.expect("no response").text().await.unwrap();
         let request_duration = time_start.elapsed();
         let mut json_result = serde_json::from_str::<FunctionResponse>(&response).unwrap();
         json_result.request_duration = request_duration;
         json_result.function_name = function_name.to_string();
         if json_result.cold_start_result && json_result.process_uptime <= 1.0 {
             results_with_duration.push(json_result);
+        } else {
+            println!("Skipping: {}, no cold start detected", function_name);
         }
-        println!("Skipping: {}, no cold start detected", function_name);
     }
     if results_with_duration.is_empty() {
         println!("No cold start detected, exiting");
