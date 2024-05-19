@@ -47,25 +47,29 @@ fn get_function_urls(mut map: HashMap<&'static str, String>) -> HashMap<&str, St
 #[tokio::main]
 async fn main() {
     let function_urls = get_function_urls(HashMap::new());
-    let mut results_with_duration = Vec::new();
-    for (function_name, url) in function_urls.iter() {
-        let time_start = std::time::Instant::now();
-        let response = reqwest::get(url).await.expect("no response").text().await.unwrap();
-        let request_duration = time_start.elapsed();
-        let mut json_result = serde_json::from_str::<FunctionResponse>(&response).unwrap();
-        json_result.request_duration = request_duration;
-        json_result.function_name = function_name.to_string();
-        if json_result.cold_start_result && json_result.process_uptime <= 1.0 {
-            results_with_duration.push(json_result);
-        } else {
-            println!("Skipping: {}, no cold start detected", function_name);
+    loop {
+        let mut results_with_duration = Vec::new();
+        for (function_name, url) in function_urls.iter() {
+            let time_start = std::time::Instant::now();
+            let response = reqwest::get(url).await.expect("no response").text().await.unwrap();
+            let request_duration = time_start.elapsed();
+            let mut json_result = serde_json::from_str::<FunctionResponse>(&response).unwrap();
+            json_result.request_duration = request_duration;
+            json_result.function_name = function_name.to_string();
+            if json_result.cold_start_result && json_result.process_uptime <= 1.0 {
+                results_with_duration.push(json_result);
+            } else {
+                println!("Skipping: {}, no cold start detected", function_name);
+            }
         }
+        if results_with_duration.is_empty() {
+            println!("No cold start detected, waiting 15 minutes");
+        } else {
+            println!("Sending metrics");
+            put_metrics(results_with_duration).await;
+        }
+        tokio::time::sleep(Duration::from_secs(60 * 15)).await;
     }
-    if results_with_duration.is_empty() {
-        println!("No cold start detected, exiting");
-        return;
-    }
-    put_metrics(results_with_duration).await;
 }
 
 async fn put_metrics(json_results: Vec<FunctionResponse>) {
