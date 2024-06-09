@@ -7,6 +7,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::time::Duration;
 use std::env;
+use tokio::task::JoinSet;
 
 // {"handlerRunTime":1715529543389,
 // "staticInitTime":1715529543384,
@@ -48,18 +49,28 @@ fn get_function_urls(mut map: HashMap<&'static str, String>) -> HashMap<&str, St
 async fn main() {
     let function_urls = get_function_urls(HashMap::new());
     loop {
+        let mut set = JoinSet::new();
         let mut results_with_duration = Vec::new();
         for (function_name, url) in function_urls.iter() {
-            let time_start = std::time::Instant::now();
-            let response = reqwest::get(url).await.expect("no response").text().await.unwrap();
-            let request_duration = time_start.elapsed();
-            let mut json_result = serde_json::from_str::<FunctionResponse>(&response).unwrap();
-            json_result.request_duration = request_duration;
-            json_result.function_name = function_name.to_string();
-            if json_result.cold_start_result && json_result.process_uptime <= 1.0 {
-                results_with_duration.push(json_result);
-            } else {
-                println!("Skipping: {}, no cold start detected", function_name);
+            let moved_name = function_name.to_string();
+            let moved_url = url.clone();
+            set.spawn(async move {
+                let time_start = std::time::Instant::now();
+                let response = reqwest::get(moved_url).await.expect("no response").text().await.unwrap();
+                let request_duration = time_start.elapsed();
+                let mut json_result = serde_json::from_str::<FunctionResponse>(&response).unwrap();
+                json_result.request_duration = request_duration;
+                json_result.function_name = moved_name.to_string();
+                json_result
+            });
+            
+            while let Some(res) = set.join_next().await {
+                let json_result = res.unwrap();
+                if json_result.cold_start_result && json_result.process_uptime <= 1.0 {
+                    results_with_duration.push(json_result);
+                } else {
+                    println!("Skipping: {}, no cold start detected", function_name);
+                }
             }
         }
         if results_with_duration.is_empty() {
