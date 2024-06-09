@@ -1,5 +1,5 @@
 # Phase 1: Build
-FROM rust:1.78-buster as builder
+FROM rust:1.78-bookworm as builder
 
 RUN mkdir curler-counter
 WORKDIR curler-counter
@@ -7,7 +7,7 @@ WORKDIR curler-counter
 COPY . .
 
 # Build the project
-RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release
+RUN --mount=type=cache,target=/curler-counter/target --mount=type=cache,target=/usr/local/cargo/registry cargo build --release
 
 # Phase 2: Run
 FROM debian:bullseye-slim
