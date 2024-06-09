@@ -52,17 +52,21 @@ async fn main() {
         let mut set = JoinSet::new();
         let mut results_with_duration = Vec::new();
         for (function_name, url) in function_urls.iter() {
-            let moved_name = function_name.to_string();
-            let moved_url = url.clone();
-            set.spawn(async move {
-                let time_start = std::time::Instant::now();
-                let response = reqwest::get(moved_url).await.expect("no response").text().await.unwrap();
-                let request_duration = time_start.elapsed();
-                let mut json_result = serde_json::from_str::<FunctionResponse>(&response).unwrap();
-                json_result.request_duration = request_duration;
-                json_result.function_name = moved_name.to_string();
-                json_result
-            });
+            let mut i = 0;
+            while i < 3 {
+                let moved_name = function_name.to_string();
+                let moved_url = url.clone();
+                set.spawn(async move {
+                    let time_start = std::time::Instant::now();
+                    let response = reqwest::get(moved_url).await.expect("no response").text().await.unwrap();
+                    let request_duration = time_start.elapsed();
+                    let mut json_result = serde_json::from_str::<FunctionResponse>(&response).unwrap();
+                    json_result.request_duration = request_duration;
+                    json_result.function_name = moved_name.to_string();
+                    json_result
+                });
+                i += 1;
+            }
             
             while let Some(res) = set.join_next().await {
                 let json_result = res.unwrap();
