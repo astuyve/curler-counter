@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::env;
 use tokio::task::JoinSet;
+use rand::Rng;
 
 // {"handlerRunTime":1715529543389,
 // "staticInitTime":1715529543384,
@@ -53,7 +54,9 @@ async fn main() {
         let mut results_with_duration = Vec::new();
         for (function_name, url) in function_urls.iter() {
             let mut i = 0;
-            while i < 3 {
+            let reqs: u32 = rand::rngs::OsRng.gen_range(3..8);
+            println!("attemps: {}", reqs);
+            while i < reqs {
                 let moved_name = function_name.to_string();
                 let moved_url = url.clone();
                 set.spawn(async move {
