@@ -52,11 +52,10 @@ async fn main() {
     loop {
         let mut set = JoinSet::new();
         let mut results_with_duration = Vec::new();
-        let mut i = 0;
         let reqs: u32 = rand::rngs::OsRng.gen_range(3..8);
         println!("attempts: {}", reqs);
         for (function_name, url) in function_urls.iter() {
-            while i < reqs {
+            for _ in 0..reqs {
                 let moved_name = function_name.to_string();
                 let moved_url = url.clone();
                 set.spawn(async move {
@@ -68,7 +67,6 @@ async fn main() {
                     json_result.function_name = moved_name.to_string();
                     json_result
                 });
-                i += 1;
             }
             
             while let Some(res) = set.join_next().await {
